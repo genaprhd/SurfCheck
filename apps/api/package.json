@@ -1,0 +1,20 @@
+{
+  "name": "@surf-check/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "corepack pnpm --filter @surf-check/shared build && tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "corepack pnpm --filter @surf-check/shared build && tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.1",
+    "@surf-check/shared": "workspace:*",
+    "fastify": "^5.3.3",
+    "zod": "^4.0.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4"
+  }
+}

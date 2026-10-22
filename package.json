@@ -1,0 +1,30 @@
+{
+  "name": "surf-check",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.13.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "corepack pnpm --filter @surf-check/shared build && corepack pnpm --filter @surf-check/api build && corepack pnpm --filter @surf-check/web build",
+    "check": "corepack pnpm lint && corepack pnpm format:check && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build",
+    "dev": "corepack pnpm --parallel --filter @surf-check/api --filter @surf-check/web dev",
+    "lint": "corepack pnpm exec eslint .",
+    "format": "corepack pnpm exec prettier --write .",
+    "format:check": "corepack pnpm exec prettier --check .",
+    "test": "corepack pnpm --filter @surf-check/shared build && corepack pnpm exec vitest run",
+    "typecheck": "corepack pnpm --recursive run typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.28.0",
+    "@types/node": "^22.15.30",
+    "eslint": "^9.28.0",
+    "eslint-config-prettier": "^10.1.5",
+    "globals": "^16.2.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.34.1",
+    "vitest": "^3.2.4"
+  }
+}

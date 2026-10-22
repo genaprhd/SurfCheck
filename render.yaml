@@ -1,18 +1,23 @@
 services:
   - type: web
     name: surf-check-api
-    runtime: python
+    runtime: node
     plan: starter
-    buildCommand: python -m compileall backend
-    startCommand: python -m backend.main
-    healthCheckPath: /healthz
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @surf-check/shared build && pnpm --filter @surf-check/api build
+    startCommand: corepack pnpm --filter @surf-check/api start
+    autoDeploy: false
     envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
       - key: SURF_CHECK_SPOTS_FILE
         value: /var/data/surf_check_spots.json
       - key: SURF_CHECK_WRITE_TOKEN
         generateValue: true
       - key: CORS_ORIGINS
         sync: false
+    healthCheckPath: /healthz
     disk:
       name: surf-check-data
       mountPath: /var/data

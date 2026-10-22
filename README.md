@@ -1,77 +1,73 @@
 # Kaliningrad Surf Check
 
-Приложение разделено на статический интерфейс и Python API:
+Приложение прогноза для серф-спотов Калининградской области. Код организован как TypeScript monorepo:
 
-- `frontend/` — страница прогноза, редактор карты, стили и конфигурация URL API. Размещается на GitHub Pages.
-- `backend/` — запросы Open-Meteo, расчёт оценок и REST API. Размещается как отдельный web service на Render.
-- `tests/` — проверки валидации точек и расчёта прогноза.
+- `apps/web/` — React 19, TypeScript, Vite и Leaflet; статический сайт публикуется на GitHub Pages.
+- `apps/api/` — Node.js 22, TypeScript и Fastify 5; API размещается на Render.
+- `packages/shared/` — общие типы и схемы валидации Zod.
+- `tests-ts/` — unit- и API-тесты на Vitest.
 
-GitHub Pages не запускает Python-код. Для работы обновления прогноза и редактора нужен доступный backend.
+Прогноз строится по Open-Meteo Marine и Forecast. Расчёт оценки, проверка опасных условий, редактор точек, вход администратора, компактный/подробный вид карточек, сводная панель и карта с почасовым прогнозом на сегодня и следующие три дня сохранены.
 
 ## Локальный запуск
 
-В первом терминале из корня проекта:
+Нужен Node.js 22 или новее и Corepack:
 
 ```sh
-python3 -m backend.main
+corepack pnpm install
+export SURF_CHECK_WRITE_TOKEN="$(openssl rand -hex 32)"
+corepack pnpm dev
 ```
 
-Во втором терминале:
+Откройте <http://localhost:5173>. Команда `dev` поднимает Vite и API одновременно. В dev-режиме Vite проксирует `/api` на `http://localhost:8777`.
+
+Токен задаётся только в окружении backend. Войдите в админку через кнопку **Войти**; токен хранится в `sessionStorage` вкладки до её закрытия или выхода. Если токен не настроен, просмотр прогноза работает, но запись точек отключена.
+
+Точки читаются из `surf_check_spots.json` в корне репозитория. Этот пользовательский файл исключён из Git. Для другого пути укажите `SURF_CHECK_SPOTS_FILE`.
+
+## Разработка и проверки
 
 ```sh
-python3 -m http.server 5500 --directory frontend
+corepack pnpm check
 ```
 
-Откройте <http://127.0.0.1:5500>. Для локального фронтенда API по умолчанию указывает на `http://127.0.0.1:8777`.
+Команда запускает ESLint, проверку форматирования Prettier, TypeScript typecheck, Vitest и production-сборки API и интерфейса. Отдельно доступны `corepack pnpm dev`, `corepack pnpm test` и `corepack pnpm build`.
 
-Чтобы разрешить сохранение точек локально, задайте один и тот же секрет только в окружении backend и вводите его в диалоге сохранения:
+## Деплой
 
-```sh
-SURF_CHECK_WRITE_TOKEN='replace-with-a-long-random-token' python3 -m backend.main
-```
+### API на Render
 
-Данные точек локально сохраняются в `surf_check_spots.json` рядом с корнем проекта. Путь можно переопределить переменной `SURF_CHECK_SPOTS_FILE`.
+1. Создайте Blueprint из репозитория и примените `render.yaml`.
+2. Render создаст `SURF_CHECK_WRITE_TOKEN`; храните его только в настройках сервиса.
+3. Добавьте `CORS_ORIGINS` со значением origin GitHub Pages, например `https://USERNAME.github.io` — без пути репозитория.
+4. Создайте для сервиса Render Deploy Hook. Сохраните его URL в GitHub Actions secret `RENDER_DEPLOY_HOOK_URL`.
+5. Постоянный диск смонтирован в `/var/data`; пользовательские точки сохраняются в `/var/data/surf_check_spots.json`.
 
-## Проверки
+CI сначала проверяет сборку. После успешной проверки GitHub Pages публикует фронтенд, а workflow запускает Render Deploy Hook. Если Render hook не настроен, автозапуск деплоя API пропускается.
 
-```sh
-python3 -m unittest discover -s tests -v
-python3 -m compileall backend
-```
+### Frontend на GitHub Pages
 
-## Размещение backend на Render
-
-1. Создайте GitHub-репозиторий из этой папки и отправьте ветку `main`.
-2. В Render создайте Blueprint из репозитория и примените `render.yaml`.
-3. Для `CORS_ORIGINS` укажите origin GitHub Pages, например `https://USERNAME.github.io` — без пути `/SurfCheck`.
-4. Render сгенерирует `SURF_CHECK_WRITE_TOKEN`. Храните его только в настройках Render; не добавляйте секрет в репозиторий или GitHub Pages.
-5. Дождитесь deploy и проверьте `https://<backend-host>/healthz`.
-6. Чтобы перенести уже сохранённые точки из локального `surf_check_spots.json`, задайте в терминале `SURF_CHECK_API_URL` и `SURF_CHECK_WRITE_TOKEN` значениями из Render и отправьте файл:
-
-   ```sh
-   curl --fail-with-body -X POST \
-     -H "Authorization: Bearer $SURF_CHECK_WRITE_TOKEN" \
-     -H "Content-Type: application/json" \
-     --data-binary @surf_check_spots.json \
-     "$SURF_CHECK_API_URL/api/spots"
-   ```
-
-   Локальный файл с точками намеренно исключён из Git, поэтому он не публикуется вместе с исходниками.
-
-Blueprint подключает постоянный диск в `/var/data`, чтобы пользовательские точки переживали перезапуск backend. Render может взимать плату за web service с постоянным диском; проверьте актуальные тарифы до создания ресурсов.
-
-## Размещение frontend на GitHub Pages
-
-1. В настройках репозитория добавьте Actions variable `SURF_CHECK_API_URL` с HTTPS URL backend, например `https://<backend-host>`.
+1. Добавьте GitHub Actions repository variable `SURF_CHECK_API_URL` с HTTPS URL API, например `https://<backend-host>`.
 2. В **Settings → Pages → Build and deployment** выберите **GitHub Actions**.
-3. Запустите workflow **Deploy frontend to GitHub Pages** либо отправьте изменения в `main`.
+3. Отправка коммита в `main` запускает CI, затем сборку и деплой GitHub Pages. Для репозиторной Pages-ссылки Vite автоматически выставляет base path.
 
-Workflow собирает только `frontend/` и записывает URL API в `config.js` на этапе deploy. Секрет записи точек в эту сборку не попадает. Для сохранения изменений интерфейс попросит токен, который Render хранит на backend; вводится он только в браузере и остаётся в `sessionStorage` текущей вкладки.
+### Перенос локальных точек
+
+После настройки Render задайте `SURF_CHECK_API_URL` и `SURF_CHECK_WRITE_TOKEN`, затем отправьте локальный файл:
+
+```sh
+curl --fail-with-body -X POST \
+  -H "Authorization: Bearer $SURF_CHECK_WRITE_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @surf_check_spots.json \
+  "$SURF_CHECK_API_URL/api/spots"
+```
 
 ## API
 
-- `GET /healthz` — проверка готовности backend.
-- `GET /api/state` — прогноз и состояние фонового обновления.
-- `GET /api/refresh` — запустить обновление прогноза.
-- `GET /api/spots` — текущий список точек.
-- `POST /api/spots` — проверить и сохранить список точек; требуется `Authorization: Bearer <SURF_CHECK_WRITE_TOKEN>`.
+- `GET /healthz` — состояние сервиса.
+- `GET /api/state` — данные прогноза и состояние обновления.
+- `GET /api/refresh` — запустить обновление.
+- `GET /api/spots` — получить конфигурацию точек.
+- `POST /api/auth` — проверить токен администратора.
+- `POST /api/spots` — валидировать и сохранить точки; требуется `Authorization: Bearer <token>`.
