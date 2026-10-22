@@ -1,4 +1,4 @@
-import type { ForecastState, Spot } from '@surf-check/shared';
+import type { ForecastState, HourForecast, Spot } from '@surf-check/shared';
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 
@@ -32,6 +32,10 @@ export const api = {
   state: () => request<ForecastState>('/api/state'),
   refresh: () => request<ForecastState>('/api/refresh'),
   spots: async () => (await request<{ spots: Spot[] }>('/api/spots')).spots,
+  methodologyHour: (spotId: string, date: string, hour: number) => {
+    const query = new URLSearchParams({ spotId, date, hour: String(hour) });
+    return request<{ hour: HourForecast }>(`/api/methodology?${query.toString()}`);
+  },
   authenticate: (token: string) =>
     request<{ authenticated: true }>('/api/auth', {
       method: 'POST',

@@ -46,4 +46,18 @@ describe('API authentication and CORS', () => {
     expect(response.statusCode).toBe(204);
     expect(response.headers['access-control-allow-origin']).toBe('https://surf.example');
   });
+
+  it('validates archive methodology parameters before requesting external data', async () => {
+    const invalidDate = await server.inject({
+      method: 'GET',
+      url: '/api/methodology?spotId=malinovka&date=2025-02-30&hour=7',
+    });
+    expect(invalidDate.statusCode).toBe(400);
+
+    const unknownSpot = await server.inject({
+      method: 'GET',
+      url: '/api/methodology?spotId=missing-spot&date=2025-06-01&hour=7',
+    });
+    expect(unknownSpot.statusCode).toBe(404);
+  });
 });

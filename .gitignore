@@ -6,5 +6,8 @@ node_modules/
 dist/
 coverage/
 surf_check_spots.json
+.env
+.env.*
+!.env.example
 _site/
 .DS_Store

@@ -4,6 +4,7 @@ import Fastify from 'fastify';
 import { z } from 'zod';
 import { config } from './config.js';
 import { startRefresh, state } from './forecast.js';
+import { fetchSpotHour } from './open-meteo.js';
 import { getSpots, saveSpots } from './spots.js';
 
 const AuthorizationSchema = z.string().startsWith('Bearer ');
@@ -35,6 +36,51 @@ export function createServer() {
   app.get('/healthz', async () => ({ status: 'ok' }));
   app.get('/api/state', async () => state);
   app.get('/api/spots', async () => ({ spots: getSpots() }));
+  app.get<{ Querystring: { spotId?: string; date?: string; hour?: string } }>(
+    '/api/methodology',
+    async (request, reply) => {
+      const querySchema = z.object({
+        spotId: z.string().min(1),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .refine((value) => {
+            const parsed = new Date(`${value}T00:00:00Z`);
+            return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+          }),
+        hour: z.coerce.number().int().min(0).max(23),
+      });
+      const parsedQuery = querySchema.safeParse(request.query);
+      if (!parsedQuery.success) {
+        return reply.code(400).send({ error: 'Укажите корректный спот, дату и час от 0 до 23.' });
+      }
+      const spot = getSpots().find(({ id }) => id === parsedQuery.data.spotId);
+      if (!spot) return reply.code(404).send({ error: 'Выбранный спот не найден.' });
+
+      try {
+        const forecastHour = await fetchSpotHour(
+          spot,
+          parsedQuery.data.date,
+          parsedQuery.data.hour,
+        );
+        return { hour: forecastHour };
+      } catch (error) {
+        request.log.warn(
+          {
+            err: error,
+            spotId: spot.id,
+            date: parsedQuery.data.date,
+            hour: parsedQuery.data.hour,
+          },
+          'Archive lookup failed',
+        );
+        return reply.code(502).send({
+          error:
+            error instanceof Error ? error.message : 'Не удалось получить данные из Open-Meteo.',
+        });
+      }
+    },
+  );
   app.get('/api/refresh', async (_request, reply) => {
     startRefresh();
     return reply.send(state);

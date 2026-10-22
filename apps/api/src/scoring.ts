@@ -1,4 +1,4 @@
-import type { HourForecast, Spot } from '@surf-check/shared';
+import type { BoardType, HourForecast, Spot, WindType } from '@surf-check/shared';
 
 type Numeric = number | null | undefined;
 type Curve = readonly (readonly [number, number])[];
@@ -51,20 +51,6 @@ const DIRECTION_SCORE_POINTS: Curve = [
   [130, 0],
   [180, 0],
 ];
-const MONTH_WATER: Record<number, number> = {
-  1: 2,
-  2: 2,
-  3: 3,
-  4: 6,
-  5: 11,
-  6: 15,
-  7: 18,
-  8: 19,
-  9: 17,
-  10: 13,
-  11: 8,
-  12: 4,
-};
 const COMPASS_DIRECTIONS = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
 
 export function clean(value: Numeric): number | null {
@@ -95,6 +81,10 @@ function angleDifference(first: Numeric, second: Numeric): number {
   const b = clean(second);
   if (a === null || b === null) return 180;
   return Math.abs(((((a - b + 180) % 360) + 360) % 360) - 180);
+}
+
+function windToDirection(directionFrom: number): number {
+  return (directionFrom + 180) % 360;
 }
 
 function bestDifference(degrees: Numeric, targets: number[]): number | null {
@@ -155,33 +145,36 @@ function chooseWave(
   return [waveHeight, wavePeriod, waveDirection];
 }
 
-function windScore(
-  speed: Numeric,
-  gust: Numeric,
-  direction: Numeric,
-  offshoreDirections: number[],
-): number {
+function windScore(speed: Numeric, gust: Numeric, direction: Numeric, rideBearing: number): number {
   const windSpeed = clean(speed);
   const windGust = clean(gust);
   const windDirection = clean(direction);
   const base = windSpeed === null ? 70 : interpolate(windSpeed, WIND_BASE_POINTS);
-  if (windDirection === null || !offshoreDirections.length) return base;
+  if (windDirection === null) return base;
 
-  const offshoreDifference = bestDifference(windDirection, offshoreDirections);
-  const onshoreDifference = bestDifference(
-    windDirection,
-    offshoreDirections.map((bearing) => (bearing + 180) % 360),
-  );
+  const windTo = windToDirection(windDirection);
+  const onshoreDifference = angleDifference(windTo, rideBearing);
+  const offshoreDifference = angleDifference(windTo, (rideBearing + 180) % 360);
   let adjustment = 0;
-  if (offshoreDifference !== null && offshoreDifference <= 65) {
-    adjustment += (1 - offshoreDifference / 65) * 12;
+  if (onshoreDifference <= 45) {
+    adjustment -= (1 - onshoreDifference / 45) * 35;
   }
-  if (onshoreDifference !== null && onshoreDifference <= 65) {
-    adjustment -= (1 - onshoreDifference / 65) * 35;
+  if (offshoreDifference <= 45) {
+    adjustment += (1 - offshoreDifference / 45) * 12;
   }
   if (windGust !== null && windSpeed !== null && windGust > windSpeed + 5) adjustment -= 8;
   if (windGust !== null && windGust > 18) adjustment -= 12;
   return clamp(base + adjustment);
+}
+
+function windType(direction: Numeric, rideBearing: number): WindType | null {
+  const validDirection = clean(direction);
+  if (validDirection === null) return null;
+
+  const difference = angleDifference(windToDirection(validDirection), rideBearing);
+  if (difference <= 45) return 'onshore';
+  if (difference >= 135) return 'offshore';
+  return 'sideshore';
 }
 
 function safetyFlags(
@@ -210,27 +203,10 @@ function verdict(score: number, danger: boolean): string {
   return 'Нет';
 }
 
-function gearAdvice(waterTemperature: Numeric, timestamp: number): string {
-  const temperature = clean(waterTemperature);
-  const month = new Date(timestamp * 1000).getUTCMonth() + 1;
-  const fallback = MONTH_WATER[month] ?? 12;
-  const value = temperature ?? fallback;
-  if (value < 5) return '6/5 мм + ботинки, перчатки, капюшон';
-  if (value < 10) return '5/4 мм + ботинки';
-  if (value < 15) return '4/3 мм';
-  if (value < 19) return '3/2 мм';
-  return '2 мм / спринг';
-}
-
-function levelAdvice(height: Numeric, wind: Numeric): string {
+function boardType(height: Numeric): BoardType | null {
   const waveHeight = clean(height);
-  const windSpeed = clean(wind);
-  if (waveHeight === null) return '—';
-  if (windSpeed !== null && windSpeed > 12) return 'Опытные / не рекомендуется';
-  if (waveHeight < 0.45) return 'Лонгборд / новички при чистом ветре';
-  if (waveHeight < 1) return 'Начинающие и лонгборд';
-  if (waveHeight < 1.8) return 'Средний уровень';
-  return 'Опытные';
+  if (waveHeight === null) return null;
+  return waveHeight < 1 ? 'longboard' : 'shortboard';
 }
 
 function buildReasons(
@@ -264,16 +240,11 @@ function buildReasons(
     else reasons.push('Направление не совпадает с лучшим окном для спота.');
   }
   if (windDirection !== null) {
-    const offshoreDifference = bestDifference(windDirection, spot.offshore);
-    const onshoreDifference = bestDifference(
-      windDirection,
-      spot.offshore.map((bearing) => (bearing + 180) % 360),
-    );
-    if (offshoreDifference !== null && offshoreDifference <= 50) {
-      reasons.push('Ветер оффшорный: поверхность чище.');
-    } else if (onshoreDifference !== null && onshoreDifference <= 50) {
-      reasons.push('Ветер оншорный: волны могут быть разбитыми.');
-    }
+    const type = windType(windDirection, spot.rideBearing);
+    if (type === 'offshore') reasons.push('Офшор: направление ветра противоположно курсу серфера.');
+    else if (type === 'onshore')
+      reasons.push('Оншор: направление ветра совпадает с курсом серфера.');
+    else if (type === 'sideshore') reasons.push('Сайдшор: ветер дует сбоку.');
   }
   if (wind !== null && wind > 10) reasons.push('Сильный ветер: сложнее с контролем и греблей.');
   if (precipitation !== null && precipitation >= 65) reasons.push('Высокая вероятность осадков.');
@@ -314,22 +285,31 @@ export function evaluateHour(
   const directionDifference = waveDirectionDifference(direction, spot.bestFrom);
   const directionScore =
     directionDifference === null ? 50 : interpolate(directionDifference, DIRECTION_SCORE_POINTS);
+  const waveHeightScore = interpolate(height, HEIGHT_POINTS);
+  const periodScore = interpolate(period, PERIOD_POINTS);
+  const windComponentScore = windScore(wind, gust, windDirection, spot.rideBearing);
   const overall =
-    0.4 * interpolate(height, HEIGHT_POINTS) +
-    0.22 * interpolate(period, PERIOD_POINTS) +
-    0.2 * directionScore +
-    0.18 * windScore(wind, gust, windDirection, spot.offshore);
+    0.4 * waveHeightScore + 0.22 * periodScore + 0.2 * directionScore + 0.18 * windComponentScore;
 
   let boundedScore = overall;
-  if (height === null) boundedScore = Math.min(boundedScore, 15);
-  if (height !== null && height < 0.25) boundedScore = Math.min(boundedScore, 8);
+  let scoreLimit: number | null = null;
+  if (height === null) scoreLimit = 15;
+  if (height !== null && height < 0.25) scoreLimit = 8;
   const [danger, dangers] = safetyFlags(height, wind, gust, weatherCode);
-  if (danger) boundedScore = Math.min(boundedScore, 12);
+  if (danger) scoreLimit = scoreLimit === null ? 12 : Math.min(scoreLimit, 12);
+  if (scoreLimit !== null) boundedScore = Math.min(boundedScore, scoreLimit);
   const score = Math.round(clamp(boundedScore));
 
   return {
     ts: timestamp,
     score,
+    scoreBreakdown: {
+      waveHeight: waveHeightScore,
+      period: periodScore,
+      waveDirection: directionScore,
+      wind: windComponentScore,
+      limit: scoreLimit,
+    },
     verdict: verdict(score, danger),
     wave: roundOne(height),
     period: roundOne(period),
@@ -338,6 +318,8 @@ export function evaluateHour(
     wind: roundOne(wind),
     gust: roundOne(gust),
     windDir: compass(windDirection),
+    windDirDeg: roundOne(windDirection),
+    windType: windType(windDirection, spot.rideBearing),
     sst: roundOne(seaTemperature),
     reasons: buildReasons(
       height,
@@ -351,8 +333,7 @@ export function evaluateHour(
       spot,
     ),
     dangers,
-    gear: gearAdvice(seaTemperature, timestamp),
-    level: levelAdvice(height, wind),
+    board: boardType(height),
     danger,
   };
 }

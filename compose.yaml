@@ -1,0 +1,21 @@
+services:
+  api:
+    image: surf-check-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8777
+      SURF_CHECK_SPOTS_FILE: /data/surf_check_spots.json
+      SURF_CHECK_WRITE_TOKEN: ${SURF_CHECK_WRITE_TOKEN:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    ports:
+      - '${SURF_CHECK_API_PORT:-8777}:8777'
+    volumes:
+      - surf-check-data:/data
+    init: true
+    restart: unless-stopped
+
+volumes:
+  surf-check-data:
