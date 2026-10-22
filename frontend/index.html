@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaliningrad Surf Check</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+<link rel="stylesheet" href="./styles.css">
+
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div>
+      <div class="eyebrow">Калининградская область · Балтийское море</div>
+      <h1>Kaliningrad Surf Check</h1>
+      <div class="sub" id="status" role="status" aria-live="polite">Загружаю данные…</div>
+    </div>
+    <div class="header-actions">
+      <button class="button secondary" id="manage-spots" type="button" onclick="openSpotEditor()">Точки на карте</button>
+      <button class="button" id="refresh" onclick="load(true)">Обновить</button>
+    </div>
+  </div>
+
+  <div id="error" class="error" role="alert" style="display:none"></div>
+  <div id="summary" class="banner" style="display:none"></div>
+  <section aria-labelledby="spots-heading">
+    <div class="section-heading-row">
+      <h2 class="section-heading" id="spots-heading">Условия на спотах</h2>
+      <p class="section-caption">Точки прогноза по районам побережья · обновление каждые 5 минут</p>
+    </div>
+    <div id="cards" class="grid"></div>
+  </section>
+  <div class="footer" id="footer"></div>
+</div>
+
+<dialog class="editor-dialog" id="spot-editor" aria-labelledby="editor-title">
+  <div class="editor-header">
+    <div>
+      <h2 class="editor-title" id="editor-title">Точки прогноза</h2>
+      <p class="editor-hint">Перетаскивайте маркеры или добавьте новую точку на карте.</p>
+    </div>
+    <button class="editor-close" type="button" aria-label="Закрыть" onclick="closeSpotEditor()">×</button>
+  </div>
+  <div class="editor-layout">
+    <div id="spot-map" aria-label="Карта точек прогноза"></div>
+    <aside class="editor-panel">
+      <button class="button secondary" id="add-spot" type="button" onclick="startAddingSpot()">+ Добавить карточку</button>
+      <div class="editor-instruction" id="editor-instruction" role="status">Выберите маркер на карте, чтобы изменить название или координаты.</div>
+      <label for="spot-name">Название карточки</label>
+      <input id="spot-name" maxlength="80" autocomplete="off" placeholder="Например, Зеленоградск">
+      <div class="coordinate-grid">
+        <div><label for="spot-lat">Широта</label><input id="spot-lat" type="number" min="-90" max="90" step="any"></div>
+        <div><label for="spot-lon">Долгота</label><input id="spot-lon" type="number" min="-180" max="180" step="any"></div>
+      </div>
+      <div class="editor-message" id="editor-message" role="alert" hidden></div>
+      <button class="button editor-save" id="save-spots" type="button" onclick="saveEditedSpots()">Сохранить изменения</button>
+    </aside>
+  </div>
+  <div class="editor-footer">Карта: © OpenStreetMap contributors · Новые точки наследуют профиль ближайшего спота · Изменения сохраняются на сервере</div>
+</dialog>
+
+<script src="./config.js"></script>
+<script src="./app.js" defer></script>
+</body>
+</html>

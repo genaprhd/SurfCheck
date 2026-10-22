@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: surf-check-api
+    runtime: python
+    plan: starter
+    buildCommand: python -m compileall backend
+    startCommand: python -m backend.main
+    healthCheckPath: /healthz
+    envVars:
+      - key: SURF_CHECK_SPOTS_FILE
+        value: /var/data/surf_check_spots.json
+      - key: SURF_CHECK_WRITE_TOKEN
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+    disk:
+      name: surf-check-data
+      mountPath: /var/data
+      sizeGB: 1
