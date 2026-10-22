@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",
+    "@neondatabase/serverless": "^1.2.0",
     "@surf-check/shared": "workspace:*",
     "fastify": "^5.3.3",
     "zod": "^4.0.5"

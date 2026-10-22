@@ -80,23 +80,26 @@ corepack pnpm check
 
 ### API на Render
 
-1. Создайте Blueprint из репозитория и примените `render.yaml`.
-2. Render создаст `SURF_CHECK_WRITE_TOKEN`; храните его только в настройках сервиса.
-3. Добавьте `CORS_ORIGINS` со значением origin GitHub Pages, например `https://USERNAME.github.io` — без пути репозитория.
-4. Создайте для сервиса Render Deploy Hook. Сохраните его URL в GitHub Actions secret `RENDER_DEPLOY_HOOK_URL`.
-5. Постоянный диск смонтирован в `/var/data`; пользовательские точки сохраняются в `/var/data/surf_check_spots.json`.
+1. Создайте бесплатный проект в Neon и скопируйте connection string с SSL.
+2. Создайте Blueprint из репозитория и примените `render.yaml`. Для сервиса выберите план **Free**.
+3. В Render добавьте `DATABASE_URL` как secret variable, используя Neon connection string. Не добавляйте её в GitHub, Pages или frontend variables.
+4. Render создаст `SURF_CHECK_WRITE_TOKEN`; скопируйте его из настроек Environment сервиса и храните как секрет.
+5. Задайте `CORS_ORIGINS` как origin GitHub Pages, например `https://USERNAME.github.io` — без пути репозитория.
+6. После настройки переменных запустите новый deploy. При первом запуске API создаст таблицу `surf_check_spots`; если она пуста, добавит локальный файл точек (при наличии) или стандартный набор.
 
 CI сначала проверяет сборку. После успешной проверки GitHub Pages публикует фронтенд, а workflow запускает Render Deploy Hook. Если Render hook не настроен, автозапуск деплоя API пропускается.
+Бесплатный Render API засыпает после периода бездействия; первый запрос после паузы может ждать запуска около минуты. Данные спотов остаются в Neon и переживают перезапуск или повторный деплой API.
 
 ### Frontend на GitHub Pages
 
 1. Добавьте GitHub Actions repository variable `SURF_CHECK_API_URL` с HTTPS URL API, например `https://<backend-host>`.
 2. В **Settings → Pages → Build and deployment** выберите **GitHub Actions**.
-3. Отправка коммита в `main` запускает CI, затем сборку и деплой GitHub Pages. Для репозиторной Pages-ссылки Vite автоматически выставляет base path.
+3. Для GitHub Pages на бесплатном тарифе репозиторий должен быть публичным.
+4. Отправка коммита в `main` запускает CI, затем сборку и деплой GitHub Pages. Для репозиторной Pages-ссылки Vite автоматически выставляет base path.
 
 ### Перенос локальных точек
 
-После настройки Render задайте `SURF_CHECK_API_URL` и `SURF_CHECK_WRITE_TOKEN`, затем отправьте локальный файл:
+После первого запуска API отправьте локальный файл, если хотите заменить стандартный набор спотов своими текущими данными. Укажите токен из настроек Render в переменной окружения терминала, не добавляя его в команду или историю shell:
 
 ```sh
 curl --fail-with-body -X POST \
@@ -105,6 +108,8 @@ curl --fail-with-body -X POST \
   --data-binary @surf_check_spots.json \
   "$SURF_CHECK_API_URL/api/spots"
 ```
+
+После успешного ответа проверьте `GET https://<backend-host>/api/spots`. Последующие изменения через админку будут записываться напрямую в Neon. Не используйте `SURF_CHECK_WRITE_TOKEN` или `DATABASE_URL` в переменных с префиксом `VITE_`: эти значения попадут в публичный frontend.
 
 ## API
 
