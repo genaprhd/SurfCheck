@@ -28,6 +28,10 @@ const databaseMock = vi.hoisted(() => {
   };
 });
 
+vi.mock('../apps/api/node_modules/@neondatabase/serverless', () => ({
+  neon: () => databaseMock.query,
+}));
+
 describe('spot persistence', () => {
   let directory: string;
   let spotsFile: string;
@@ -42,7 +46,6 @@ describe('spot persistence', () => {
   });
 
   afterEach(async () => {
-    vi.doUnmock('@neondatabase/serverless');
     vi.unstubAllEnvs();
     await rm(directory, { recursive: true, force: true });
   });
@@ -59,9 +62,6 @@ describe('spot persistence', () => {
 
   it('seeds Neon from defaults and persists subsequent spot updates', async () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://user:password@db.example.test/surf?sslmode=require');
-    vi.doMock('@neondatabase/serverless', () => ({
-      neon: () => databaseMock.query,
-    }));
     vi.resetModules();
     const { getSpots, loadSavedSpots, saveSpots } = await import('../apps/api/src/spots.js');
 
